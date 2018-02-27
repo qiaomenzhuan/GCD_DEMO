@@ -10,6 +10,8 @@
 
 @interface ViewController ()
 
+@property (nonatomic,assign) NSInteger ticketSurplusCount;
+@property (nonatomic, strong)dispatch_semaphore_t semaphore;
 @end
 
 @implementation ViewController
@@ -31,26 +33,26 @@
  
  这个是串行队列 区别就是参数DISPATCH_QUEUE_SERIAL
  dispatch_queue_t queue = dispatch_queue_create("orun_GCD", DISPATCH_QUEUE_SERIAL);
-
+ 
  
  */
 - (void)viewDidLoad {
     [super viewDidLoad];
     [self gcd_test];
-//    [self sync_concurrent];
-//    [self sync_serial];
-//    [self sync_main];
-//    [self async_concurrent];
-//    [self async_serial];
-//    [self async_main];
+    //    [self sync_concurrent];
+    //    [self sync_serial];
+    //    [self sync_main];
+    //    [self async_concurrent];
+    //    [self async_serial];
+    //    [self async_main];
+    [self initTicketStatusNotSave];
+    //        [NSThread detachNewThreadSelector:@selector(async_main) toTarget:self withObject:nil];
     
-//        [NSThread detachNewThreadSelector:@selector(async_main) toTarget:self withObject:nil];
-
 }
 
 - (void)gcd_test
 {
-//    dispatch_queue_t queue = dispatch_queue_create("test", DISPATCH_QUEUE_CONCURRENT);
+    //    dispatch_queue_t queue = dispatch_queue_create("test", DISPATCH_QUEUE_CONCURRENT);
     dispatch_group_t group = dispatch_group_create();
     dispatch_queue_t queue = dispatch_queue_create("ddd", DISPATCH_QUEUE_CONCURRENT);
     dispatch_group_enter(group);
@@ -70,7 +72,7 @@
     dispatch_group_notify(group, queue, ^{
         NSLog(@"全部执行完了%@",[NSThread currentThread]);
     });
-
+    
     dispatch_async(queue, ^{
         NSLog(@"大大%@",[NSThread currentThread]);
         dispatch_group_wait(group, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC));
@@ -252,6 +254,55 @@
     
     NSLog(@"async_main----end");
 }
+
+#pragma mark - 信号量
+//- (void)semaphore
+//{
+//
+//}
+- (void)initTicketStatusNotSave {
+    NSLog(@"currentThread---%@",[NSThread currentThread]);  // 打印当前线程
+    NSLog(@"semaphore---begin");
+    
+    self.ticketSurplusCount = 50;
+    
+    self.semaphore = dispatch_semaphore_create(1);
+    // queue1 代表北京火车票售卖窗口
+    dispatch_queue_t queue1 = dispatch_queue_create("net.bujige.testQueue1", DISPATCH_QUEUE_SERIAL);
+    // queue2 代表上海火车票售卖窗口
+    dispatch_queue_t queue2 = dispatch_queue_create("net.bujige.testQueue2", DISPATCH_QUEUE_SERIAL);
+    
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(queue1, ^{
+        [weakSelf saleTicketNotSafe];
+    });
+    
+    dispatch_async(queue2, ^{
+        [weakSelf saleTicketNotSafe];
+    });
+}
+
+/**
+ * 售卖火车票(非线程安全)
+ */
+- (void)saleTicketNotSafe {
+    while (1) {
+        dispatch_semaphore_wait(self.semaphore, DISPATCH_TIME_FOREVER);
+        if (self.ticketSurplusCount > 0) {  //如果还有票，继续售卖
+            self.ticketSurplusCount--;
+            NSLog(@"%@", [NSString stringWithFormat:@"剩余票数：%ld 窗口：%@", self.ticketSurplusCount, [NSThread currentThread]]);
+            [NSThread sleepForTimeInterval:0.2];
+        } else { //如果已卖完，关闭售票窗口
+            NSLog(@"所有火车票均已售完");
+            
+            dispatch_semaphore_signal(self.semaphore);
+            break;
+        }
+        dispatch_semaphore_signal(self.semaphore);
+        
+    }
+}
+
 - (void)didReceiveMemoryWarning {
     [super didReceiveMemoryWarning];
     // Dispose of any resources that can be recreated.
@@ -259,3 +310,4 @@
 
 
 @end
+
